@@ -27,6 +27,8 @@ int isReg(const char *path);
 
 int combineLogs(const char *fileName, const char *logName);
 
+int findDirCountInDirectory(const char *path);
+
 typedef struct {
     int childProcessID;
     int fileDescriptorID[2];
@@ -42,17 +44,19 @@ int listDir(const char *path);
 
 int main(int argc, char **argv) {
 
+    int dirCount=0;
     int total = 0;
     char tempLogName[MAX_PATH_LEN];
     if (argc != 3) {
         fprintf(stdout, "Usage: %s string dirname\n", argv[0]);
         return 1;
     }
-    total = search(argv[2], argv[1]);
+    /*total = search(argv[2], argv[1]);*/
     /*printf("Total occurences of %s is %d\n",argv[1],total);*/
-
-    sprintf(tempLogName, "...%d", getpid());
-    rename(tempLogName, "log.log");
+    dirCount=listDir(argv[2]);
+    printf("DirCount=%d",dirCount);
+    /*sprintf(tempLogName, "...%d", getpid());
+    rename(tempLogName, "log.log");*/
     return total;
 }
 
@@ -65,6 +69,7 @@ int listDir(const char *path) {
         while ((ent = readdir(dir)) != NULL) {
             if (ent->d_type == DT_REG && strcmp(ent->d_name, ".") != 0 && strcmp(ent->d_name, "..") != 0 &&
                 strcmp(ent->d_name, "...") != 0) {
+                /*printf("Ent->d_name:%s",ent->d_name);*/
                 fileCount++;
                 listDir(ent->d_name);
             }
@@ -72,6 +77,30 @@ int listDir(const char *path) {
         closedir(dir);
     }
     return fileCount;
+}
+/*Directory'nin icindeki directory'leri bulmak icin*/
+int findDirCountInDirectory(const char *path) {
+    int DirectoryCount = 0;
+    DIR *dir;
+    struct dirent *ent;
+    if ((dir = opendir(path)) != NULL) {
+        while ((ent = readdir(dir)) != NULL) {
+            printf("Directory icerisindeyim\n");
+            printf("%s\n",ent->d_name);
+            if (ent->d_type == DT_DIR || strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0 ||
+                strcmp(ent->d_name, "...") == 0) {
+                DirectoryCount++;
+                /*printf("Directory Names:%s",ent->d_name);*/
+                if(strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0 ||
+                   strcmp(ent->d_name, "...") == 0)
+                {
+                    DirectoryCount--;
+                }
+            }
+        }
+        closedir(dir);
+    }
+    return DirectoryCount;
 }
 
 
@@ -118,9 +147,8 @@ int search(const char *dirpath, const char *word) {
     FifoCon_t *openedFifos;
 
     fileCount = listDir(dirpath);
-    //dirCount = getDirCount(dirpath);
-
-
+    /*dirCount=findDirCountInDirectory(dirpath);*/
+    /*fprintf(stdout,"DirCount:%d",dirCount);*/
 
     openedFifos = (FifoCon_t *) malloc(sizeof(FifoCon_t)*dirCount);
     pipeConnectionArray = (PipeWithFork *) malloc(sizeof(PipeWithFork) * fileCount);
@@ -142,7 +170,7 @@ int search(const char *dirpath, const char *word) {
         }
     }
 
-    
+
     /*Directory acildi mi diye baslangicta kontrol edilir, base case */
     if ((m_dir = opendir(dirpath)) != NULL) {
         /* initialize path*/
