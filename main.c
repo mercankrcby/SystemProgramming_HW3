@@ -11,9 +11,8 @@
 
 
 #define MAX_PATH_LEN 255
-
-#define FILE_NAME_LENGTH 255
-#define FILE_CONTENT_LENGTH 255
+#define MAX_NAME_LEN 255
+#define FIFO_PERM  (S_IRUSR | S_IWUSR) /* taked from book */
 
 /*Fonksiyon Prototipleri*/
 int fileOperations(const char *path, const char *fname,int pipeFD,const char *word);
@@ -28,19 +27,18 @@ int isReg(const char *path);
 
 int combineLogs(const char *fileName, const char *logName);
 
-
 typedef struct {
     int childProcessID;
     int fileDescriptorID[2];
 } PipeWithFork;
 
+typedef struct {
+    pid_t pid;
+    char fifoName[MAX_NAME_LEN];
+} FifoCon_t;
+
 /*Fonksiyon prototipleri*/
 int listDir(const char *path);
-
-char *readFile(char *fileName);
-
-void pipeFunction(char *directoryPath);
-
 
 int main(int argc, char **argv) {
 
@@ -56,12 +54,6 @@ int main(int argc, char **argv) {
     sprintf(tempLogName, "...%d", getpid());
     rename(tempLogName, "log.log");
     return total;
-}
-
-/*Dosyalar arasindaki degerleri pipe ile aktarmak icin kullanilan fonksiyon*/
-void pipeFunction(char *directoryPath) {
-
-
 }
 
 /*Directory'nin icindeki file'lari bulan fonksiyon*/
@@ -114,17 +106,23 @@ int search(const char *dirpath, const char *word) {
     pid_t m_childpid;
     int numofoccs = 0;
     char fname[MAX_PATH_LEN];
-    int fileCount;
+    int fileCount=0;
+    int dirCount=0;
     int i;
     pid_t childpid;
-    pid_t cPid;
     int fileIndex = 0;
     int dirIndex = 0;
     pid_t returnPid;
+    char fifoName[MAX_NAME_LEN];
     PipeWithFork *pipeConnectionArray;
+    FifoCon_t *openedFifos;
 
     fileCount = listDir(dirpath);
+    //dirCount = getDirCount(dirpath);
 
+
+
+    openedFifos = (FifoCon_t *) malloc(sizeof(FifoCon_t)*dirCount);
     pipeConnectionArray = (PipeWithFork *) malloc(sizeof(PipeWithFork) * fileCount);
     /* open pipes */
     for (i = 0; i < fileCount; ++i) {
@@ -134,6 +132,17 @@ int search(const char *dirpath, const char *word) {
         }
     }
 
+
+    for(i=0;i<dirCount;++i){
+        char name[MAX_NAME_LEN];
+        sprintf(name,".%d_%d.fifo",getpid(),i);
+        if(mkfifo(name,FIFO_PERM)<0){
+            fprintf(stderr,"Fifo open error");
+            exit(1);
+        }
+    }
+
+    
     /*Directory acildi mi diye baslangicta kontrol edilir, base case */
     if ((m_dir = opendir(dirpath)) != NULL) {
         /* initialize path*/
