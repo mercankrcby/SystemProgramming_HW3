@@ -1,0 +1,30 @@
+#IncludeRegexLine: ^[ 	]*#[ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/Users/macboookair/CLionProjects/CSE244-SYSTEM-2017HW/HW3/main.c
+dirent.h
+-
+sys/stat.h
+-
+sys/types.h
+-
+sys/wait.h
+-
+stdio.h
+-
+string.h
+-
+stdlib.h
+-
+unistd.h
+-
+fcntl.h
+-
+ctype.h
+-
+

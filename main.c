@@ -7,292 +7,72 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <ctype.h> /* isdigit */
+
+
+#define MAX_PATH_LEN 255
 
 #define FILE_NAME_LENGTH 255
 #define FILE_CONTENT_LENGTH 255
 
+/*Fonksiyon Prototipleri*/
+int fileOperations(const char *path, const char *fname,int pipeFD,const char *word);
+
+int search(const char *dirname, const char *word);
+
+int findOccurences(const char *array, const char *word, const char *fname, int pipeFD);
+
+int isDir(const char *path);
+
+int isReg(const char *path);
+
+int combineLogs(const char *fileName, const char *logName);
+
+
 typedef struct {
     int childProcessID;
     int fileDescriptorID[2];
-} PipeWithFork ;
+} PipeWithFork;
 
 /*Fonksiyon prototipleri*/
-int listDir(char* path);
-char* readFile(char* fileName);
+int listDir(const char *path);
+
+char *readFile(char *fileName);
+
 void pipeFunction(char *directoryPath);
 
 
-int main(int argc, char *argv[]) {
-    //Usage
-    if(argc!=2)
-    {
-        fprintf(stdout,"Usage:%s processes \n",argv[0]);
+int main(int argc, char **argv) {
+
+    int total = 0;
+    char tempLogName[MAX_PATH_LEN];
+    if (argc != 3) {
+        fprintf(stdout, "Usage: %s string dirname\n", argv[0]);
         return 1;
     }
-    pipeFunction(argv[1]);
+    total = search(argv[2], argv[1]);
+    /*printf("Total occurences of %s is %d\n",argv[1],total);*/
+
+    sprintf(tempLogName, "...%d", getpid());
+    rename(tempLogName, "log.log");
+    return total;
 }
+
 /*Dosyalar arasindaki degerleri pipe ile aktarmak icin kullanilan fonksiyon*/
-void pipeFunction(char *directoryPath)
-{
-    PipeWithFork *pipeConnectionArray;
-    int fileCount=0;
-    char buf[]="g";
-    int comeIn=0;
-    pid_t childpid=0;
-    pid_t cPid=0;
-    pid_t returnPid;
-    //pipe icin fileDescriptor
-    int fd[2];
-    int fileDescriptorID=0;
-    int i,n,j;
-    int forkIndex;
-    int index=0;
-    int status=0;
-    int listCount=0;
-    DIR *d;
-    struct dirent *dir;
-    char* ch;
-    char* dizi=NULL;
-    int forkCount=0;
-    //Malloc ile yer alinan matrisler
-    char **fileNamesMatrix;
-    char **WriteFileAfterPipe;
+void pipeFunction(char *directoryPath) {
 
-    fileCount=listDir(directoryPath);
-
-    /*PipeWithFork Struct'ımıza ait dinamik Array olusturmak*/
-    pipeConnectionArray=(PipeWithFork*)malloc(sizeof(PipeWithFork)*fileCount);
-
-
-    /******************************************************************/
-
-    /*-----------------DosyaIsimleriArrayeYerlestirildi---------------*/
-
-    /******************************************************************/
-    /*Dosya isimlerini tutabilmek icin malloc ile yer acildi*/
-    fileNamesMatrix = (char**) malloc(fileCount * sizeof(char*));
-
-    if(NULL == fileNamesMatrix){
-        free(fileNamesMatrix);
-        printf("fileNamesMatrix[] için hafıza ayırırken hata oluştu.n");
-        exit(-1);
-    }
-
-    for (i=0;i<fileCount;i++){
-        fileNamesMatrix[i] = (char*) malloc(FILE_NAME_LENGTH * sizeof(char));
-        if(NULL == fileNamesMatrix[i]){
-            free(fileNamesMatrix[i]);
-            printf("fileNamesMatrix[i][] için hafıza ayırırken hata oluştu.n");
-            exit(-1);
-        }
-    }
-    //fprintf(stdout,"------");
-    /*fileNameMatrix directorynin icindeki file isimleri ile dolduruldu*/
-    i=0;
-    d = opendir(directoryPath);
-    if (d)
-    {
-        while ((dir = readdir(d)) != NULL)
-        {
-            if(strcmp(dir->d_name, ".") != 0  && strcmp(dir->d_name, "..") != 0 && strcmp(dir->d_name,"...")!=0)
-            {
-                strcpy(fileNamesMatrix[i],dir->d_name);
-                //printf("File Names---->%s\n",fileNamesMatrix[i]);
-                ++i;
-            }
-        }
-        closedir(d);
-    }
-    printf("i=%d",i);
-    //writePipeFile(fileNamesMatrix,i);
-    /*************************************************************************/
-
-    /*-----------------------ForWriteToFileFromPipe--------------------------*/
-
-    /*************************************************************************/
-    /*Pipe dan gelen degerleri dosyalara kaydetmek icin malloc ile yer acildi*/
-    WriteFileAfterPipe = (char**) malloc(fileCount * sizeof(char*));
-
-    if(NULL == WriteFileAfterPipe){
-        free(WriteFileAfterPipe);
-        printf("WriteFileAfterPipe[] için hafıza ayırırken hata oluştu.n");
-        exit(-1);
-    }
-
-    for (i=0;i<fileCount;i++){
-        WriteFileAfterPipe[i] = (char*) malloc(FILE_CONTENT_LENGTH * sizeof(char));
-        if(NULL == WriteFileAfterPipe[i]){
-            free(WriteFileAfterPipe[i]);
-            printf("WriteFileAfterPipe[i][] için hafıza ayırırken hata oluştu.n");
-            exit(-1);
-        }
-    }
-    /****************************************************************************/
-
-    for(i=0;i<fileCount;++i){
-        if(pipe(pipeConnectionArray[i].fileDescriptorID)==-1)
-        {
-            perror("Failed to create the synchronization pipe");
-            exit(1);
-        }
-    }
-
-    for(i=0;i<fileCount;++i)
-    {
-        int j=0;
-        int writeFD;
-        if((childpid=fork())==0){
-            char ar[255];
-
-            cPid=getpid();
-            close(pipeConnectionArray[i].fileDescriptorID[0]);
-            writeFD = pipeConnectionArray[i].fileDescriptorID[1];
-            printf("IN:%d, OUT:%d\n",0,writeFD);
-            //ch=readFile(fileNamesMatrix[i]);
-
-
-            sprintf(ar,"child:%d",getpid());
-            write(writeFD,ar,255);
-
-            close(writeFD);
-            exit(1);
-        }else if(childpid >0){
-            pipeConnectionArray[i].childProcessID = childpid;
-            close(pipeConnectionArray[i].fileDescriptorID[1]);
-        }
-    }
-
-    while((returnPid = wait(&status))!=-1){
-
-        int readFD;
-        char ar[255];
-        for(j=0;j<fileCount;++j){
-            if(returnPid == pipeConnectionArray[j].childProcessID)
-                readFD = pipeConnectionArray[j].fileDescriptorID[0];
-        }
-
-        printf("ReadFD:%d\n",readFD);
-
-
-        while(read(readFD,ar,255) >0){
-            printf("Parent Read: %s\n",ar );
-        }
-
-        close(readFD);
-
-    }
-    //printf("ddddd");
-
-    /*
-    dizi=(char *)malloc(((listCount+1)*sizeof(char)));
-    //printf("%s",argv[0]);
-    i=0;
-    if (d)
-    {
-      while ((dir = readdir(d)) != NULL)
-      {
-        dizi[i]=dir->d_name;
-        //printf("%s\n", dir->d_name);
-        ++i;
-      }
-      closedir(d);
-    }
-
-    n=atoi(argv[1]);
-    //printf("n=%d",n);
-    //pipe aciyoruz, hatali durum olustuysa burada kontrol ediyoruz
-    if(pipe(fd)==-1)
-    {
-      perror("Failed to create the synchronization pipe");
-      return 1;
-    }
-
-    for(i=1;i<listCount;++i)
-    {
-      if((childpid=fork())<=0)
-        ch=readFile(dizi[i-1]);
-        write(fd[1],ch,1);
-    }
-    if(childpid>0)
-    {
-      for(i=1;i<listCount;++i)
-      {
-        if(read(fd[0],buf,1)!=1)
-        {
-          perror("Failed to write synchronization characters");
-          printf("Buf[%d]=%s\n",i,buf);
-        }
-        printf("Buf[%d]=%s\n",i,buf);
-      }
-    }
-    //fprintf(stderr,"a");
-  /*
-    if(read(fd[0],buf,1)!=1)
-      perror("Failed to read synchronization characters");
-  */
-/*
-  fprintf(stderr,"\ni:%d process ID:%ld parent ID:%ld child ID:%ld\n",
-                    i,(long)getpid(),(long)getppid(),(long)childpid);
-  //printf("buf:%s",buf);
-  exit(EXIT_FAILURE);
-  return (childpid==-1);*/
-}
-/*Dosyadan iki adet string okuyacak sekilde tasarlandi*/
-char* readFile(char* fileName)
-{
-    FILE *dosya;
-    char k1[10],k2[10];
-    char result[30];
-    //result[0]='1';
-    char *type ;
-    int resultSize=0;
-    int i;
-    strcpy(result,"1");
-    //printf("FileName1:%s",fileName);
-    for(i=0;i<3;++i)
-    {
-        if(fileName[strlen(fileName)-1]=='t' && fileName[strlen(fileName)-2]=='x' && fileName[strlen(fileName)-3]=='t')
-        {
-
-            if((dosya =fopen(fileName,"r"))!=NULL)
-            {
-                fscanf(dosya,"%s",k1);
-                fscanf(dosya,"%s",k2);
-                //printf("%s %s ",k1,k2);
-            }
-            else
-            {
-                printf("Dosya Okunamadi.");
-            }
-            strcat(result,k1);
-            strcat(result,k2);
-            //result[29]='\0';
-            //printf("File Name:%s ",fileName);
-            //printf("-Result String:%s",result);
-            resultSize=strlen(result);
-            type= (char*)malloc(resultSize*sizeof(char));
-            type=result;
-            fclose(dosya);
-            return type;
-        }
-        else{
-            strcpy(result,"1");
-            resultSize=strlen(result);
-            type= (char *)malloc(resultSize*sizeof(char));
-            type=result;
-            return type;
-        }
-    }
 
 }
+
 /*Directory'nin icindeki file'lari bulan fonksiyon*/
-int listDir(char* path){
-    int fileCount=0;
-    DIR* dir;
+int listDir(const char *path) {
+    int fileCount = 0;
+    DIR *dir;
     struct dirent *ent;
-    if((dir=opendir(path)) != NULL){
-        while (( ent = readdir(dir)) != NULL){
-            if(ent->d_type == DT_REG && strcmp(ent->d_name, ".") != 0  && strcmp(ent->d_name, "..") != 0 && strcmp(ent->d_name,"...")!=0){
+    if ((dir = opendir(path)) != NULL) {
+        while ((ent = readdir(dir)) != NULL) {
+            if (ent->d_type == DT_REG && strcmp(ent->d_name, ".") != 0 && strcmp(ent->d_name, "..") != 0 &&
+                strcmp(ent->d_name, "...") != 0) {
                 fileCount++;
                 listDir(ent->d_name);
             }
@@ -300,4 +80,305 @@ int listDir(char* path){
         closedir(dir);
     }
     return fileCount;
+}
+
+
+/*Directory olup olmadigini anlamak icin path alarak onu kontrol eder*/
+int isDir(const char *path) {
+    struct stat statbuf;
+    if (stat(path, &statbuf) == -1) {
+        return 0;
+    }
+    return S_ISDIR(statbuf.st_mode);
+}
+
+/*TextFile olup olmadigin directory fonksiyonunda oldugu gibi path alarak kontrol eder*/
+int isReg(const char *path) {
+    struct stat statbuf;
+    if (stat(path, &statbuf) == -1) {
+        return 0;
+    }
+    return S_ISREG(statbuf.st_mode);
+}
+
+/*Directory name ve word alarak verilen directory icindeki file'lar icin ve ayni zamanda
+kendi directorysi altindaki directory'lerin icindeki file'larda arama yapar. Yaptigi arama
+sonucunda kac tane buldugunu da return eder.Fonksiyonun icerisinde fork yapilarak processler
+iki katina cikarilir ayni zamanda , recursive kol yapılarak da directoryler arasinda gezilir*/
+int search(const char *dirpath, const char *word) {
+
+    /*Directory'ler icin ozel olarak tanimlanmis struct*/
+    struct dirent *m_dirent = NULL;
+    DIR *m_dir;
+    char path[MAX_PATH_LEN];
+    pid_t m_childpid;
+    int numofoccs = 0;
+    char fname[MAX_PATH_LEN];
+    int fileCount;
+    int i;
+    pid_t childpid;
+    pid_t cPid;
+    int fileIndex = 0;
+    int dirIndex = 0;
+    pid_t returnPid;
+    PipeWithFork *pipeConnectionArray;
+
+    fileCount = listDir(dirpath);
+
+    pipeConnectionArray = (PipeWithFork *) malloc(sizeof(PipeWithFork) * fileCount);
+    /* open pipes */
+    for (i = 0; i < fileCount; ++i) {
+        if (pipe(pipeConnectionArray[i].fileDescriptorID) == -1) {
+            perror("Failed to create the synchronization pipe");
+            exit(1);
+        }
+    }
+
+    /*Directory acildi mi diye baslangicta kontrol edilir, base case */
+    if ((m_dir = opendir(dirpath)) != NULL) {
+        /* initialize path*/
+        strcpy(path, dirpath);
+        strcat(path, "/");
+        /*Directory icerisine girilip okundugu surece while icerisinde kontroller yapilir ,fork olusturulur*/
+        while ((m_dirent = readdir(m_dir)) != NULL) {
+            if (strcmp(m_dirent->d_name, ".") != 0 &&
+                strcmp(m_dirent->d_name, "..") != 0 &&
+                strncmp(m_dirent->d_name, "...", 3) != 0) { /* special log files*/
+                char tempPath[MAX_PATH_LEN];
+                strcpy(tempPath, path);
+                strcat(tempPath, m_dirent->d_name);
+                strcpy(fname, m_dirent->d_name);
+                /*Text File ya da Directory olup olmadigi kontrolu yapilir */
+
+                if (isReg(tempPath)) {
+                    int j = 0;
+                    int writeFD;
+                    if ((childpid = fork()) == 0) {
+                        char ar[255];
+
+                        close(pipeConnectionArray[fileIndex].fileDescriptorID[0]);
+                        writeFD = pipeConnectionArray[fileIndex].fileDescriptorID[1];
+
+
+                        fileOperations(tempPath,fname,writeFD,word);
+
+                        write(writeFD, ar, 255);
+
+                        close(writeFD);
+                        exit(1);
+                    } else if (childpid > 0) {
+                        pipeConnectionArray[fileIndex].childProcessID = childpid;
+                        close(pipeConnectionArray[fileIndex].fileDescriptorID[1]);
+                        ++fileIndex;
+                    }
+
+                }
+
+
+                if (isDir(tempPath)) {
+                    m_childpid = fork();
+                    /*Hatali fork olusumu */
+                    if (m_childpid == -1) {
+                        fprintf(stderr, "Fork error. Emergency exit\n");
+                        exit(EXIT_FAILURE);
+                    }
+                        /*Child Process*/
+                    else if (m_childpid == 0) {
+                        strcat(path, m_dirent->d_name);
+                        m_dirent = NULL;
+
+                        closedir(m_dir);
+                        m_dir = NULL;
+                        break;
+                    }
+                }
+            }
+        }
+
+        while ((returnPid = wait(NULL)) != -1) {
+            int j;
+            int readFD;
+            char ar[255];
+            for (j = 0; j < fileCount; ++j) {
+                if (returnPid == pipeConnectionArray[j].childProcessID)
+                    readFD = pipeConnectionArray[j].fileDescriptorID[0];
+            }
+
+            printf("ReadFD:%d\n", readFD);
+
+            while (read(readFD, ar, 255) > 0) {
+                printf("Parent Read: %s\n", ar);
+            }
+
+            close(readFD);
+
+        }
+
+        /*Parent Process İslemleri*/
+/*
+        pid_t returnPid;
+        char procLogName[MAX_PATH_LEN];
+        int status = 0;
+        int totalOcc = 0;
+        FILE *myLog;
+
+        sprintf(procLogName, "...%d", getpid());
+
+        while ((returnPid = wait(&status)) != -1) {
+            char childLogname[MAX_PATH_LEN];
+            sprintf(childLogname, "...%d", returnPid);
+            totalOcc += combineLogs(procLogName, childLogname);
+        }
+
+        if ((myLog = fopen(procLogName, "a+")) == NULL) {
+            fprintf(stderr, "Failed to open childLog\n");
+            exit(EXIT_FAILURE);
+        }
+
+        fprintf(myLog, "%d %s were found in total.\n", totalOcc, word);
+        Dosya ve directory kapatilir
+        fclose(myLog);
+        closedir(m_dir);
+        */
+        return 0;
+
+    } else {
+        fprintf(stderr, "Directory open error. DirectoryName:%s\n", dirpath);
+        exit(EXIT_FAILURE);
+    }
+}
+
+/* Her dosya icin olusturulmus log file'lari birlestirir*/
+int combineLogs(const char *parentLogPath, const char *childLogPath) {
+    FILE *childLog;
+    FILE *parentLog;
+    char line[MAX_PATH_LEN];
+    int total = 0;
+    /*Read modunda cocuk processler tarafindan dosyadan alinan bilgiler okunur*/
+    if ((childLog = fopen(childLogPath, "r")) == NULL) {
+        fprintf(stderr, "Failed to open childLog\n");
+        exit(EXIT_FAILURE);
+    }
+
+    if ((parentLog = fopen(parentLogPath, "a+")) == NULL) {
+        fprintf(stderr, "Fail to open parentLog:%s\n", parentLogPath);
+        exit(EXIT_FAILURE);
+    }
+    /*bir bir kopyasi log dosyasina eklendi*/
+
+    while (fgets(line, MAX_PATH_LEN, childLog) != NULL) {
+        if (isdigit(line[0])) {
+            int num;
+            sscanf(line, "%d", &num);
+            total += num;
+        } else {
+            fprintf(parentLog, "%s", line);
+        }
+    }
+
+
+    fclose(childLog);
+    fclose(parentLog);
+    unlink(childLogPath);
+    return total;
+}
+
+/* Dosya okuma islemi yaparak oncelikle dosyanin kac harften olustugunu bulur daha sonrasinda
+malloc ile yer alarak tek boyutlu array de saklar. Fonksiyonun sonunda dosyada kac tane word
+gectigini bulduguna dair ekrana cikti basar*/
+
+int fileOperations(const char *path, const char *fname,int pipeFD, const char *word) {
+    FILE *dosya = NULL;
+    char ch;
+    int letterNumber = 0;
+    char *dizi = NULL;
+    int totalOccNum;
+
+
+    if ((dosya = fopen(path, "r")) != NULL) {
+        while (fscanf(dosya, "%c", &ch) != EOF) {
+            ++letterNumber;
+        }
+        fclose(dosya);
+        /*printf("Maximum Column Number = %d\n Maximum Row Number = %d ",maxNumber,rowNumber);*/
+    } else {
+        fprintf(stderr, "File Read error!");
+        return 1;
+    }
+
+    dizi = (char *) malloc(((letterNumber + 1) * sizeof(char)));
+
+    letterNumber = 0;
+    if ((dosya = fopen(path, "r")) != NULL) {
+        while (fscanf(dosya, "%c", &ch) != EOF) {
+            dizi[letterNumber] = ch;
+            ++letterNumber;
+        }
+        dizi[letterNumber] = '\0'; /* end of char array*/
+        fclose(dosya);
+        dosya = NULL;
+    } else {
+        fprintf(stderr, "File Read error!");
+        /*free taken memories*/
+        free(dizi);
+        dizi = NULL;
+        return 1;
+    }
+
+    totalOccNum = findOccurences(dizi, word, fname, pipeFD);
+    fprintf(stderr, "%d %s were found in total.\n", totalOccNum,word);
+
+    free(dizi);
+    dizi = NULL;
+
+    return totalOccNum;
+}
+
+/*FindOccurences fonksiyonu cagirilarak dosyada word'un kac kez gectigi bilgisi
+ogrenilerek ekrana basilir*/
+int findOccurences(const char *array, const char *word, const char *fname, int pipeFD) {
+    int i = 0, rowNumber = 0, currentNum = 0;
+    int foundColumn = 0, foundRow = 0;
+    int found = 0;
+    int arraySize = 0, wordSize = 0;
+    int search = 0;
+    int index = 0;
+
+    arraySize = strlen(array);
+    wordSize = strlen(word);
+
+    for (i = 0; i < arraySize; ++i) {
+        if (array[i] == word[0]) {
+            foundColumn = i;
+            foundRow = rowNumber;
+            index = i + 1;
+            currentNum = 1;
+            search = 1; /* search status */
+
+            while (search && index < arraySize) {
+                if (array[index] == word[currentNum]) {
+                    /* printf("%c - %c\n",array[index],word[currentNum]); */
+                    currentNum += 1;
+                } else if (array[index] == ' ' || array[index] == '\t' || array[index] == '\n') {
+                    /* do nothing */
+                } else {
+                    search = 0;
+                }
+
+                if (wordSize == currentNum) {
+                    char message[MAX_PATH_LEN];
+                    search = 0;
+                    ++found;
+                    sprintf(message, "%s: [%d-%d] %s first character is found.\n", fname, foundRow + 1, foundColumn + 1,
+                            word);
+                    write(pipeFD,message,MAX_PATH_LEN);
+                }
+                ++index;
+            }
+        } else if (array[i] == '\n') {
+            ++rowNumber;
+        }
+    }
+
+    return found;
 }

@@ -1,0 +1,5 @@
+a.txt: [1-11] ece first character is found.
+a.txt: [1-29] ece first character is found.
+b.txt: [1-9] ece first character is found.
+b.txt: [1-25] ece first character is found.
+4 ece were found in total.
